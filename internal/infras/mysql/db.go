@@ -43,6 +43,10 @@ type WagerRepo struct {
 type PurchaseRepo struct {
 }
 
+func (s *WagerRepo) GetWagerForUpdate(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error) {
+	return togo.New(db).GetWagerForUpdate(ctx, id)
+}
+
 func (s *WagerRepo) GetWager(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error) {
 	return togo.New(db).GetWager(ctx, id)
 }

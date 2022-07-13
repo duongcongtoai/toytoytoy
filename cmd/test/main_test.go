@@ -5,8 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 	"testing"
 
 	"github.com/brpaz/echozap"
@@ -23,13 +21,18 @@ var (
 		Mysql mysql.Config
 		Port  int
 	}
-	configPath = flag.String("config", "/configs/config.yaml", "path to config file")
-	ServerHost = "db_test"
+	configPath = flag.String("config", "/configs/config.test.yaml", "path to config file")
+	serverHost = flag.String("serverhost", "app_test", "addr of setup server")
 )
 
 func getServerAddr() string {
-	return fmt.Sprintf("%s:%d", ServerHost, conf.Port)
+	return fmt.Sprintf("%s:%d", *serverHost, conf.Port)
 }
+
+var _ = func() bool {
+	testing.Init()
+	return true
+}()
 
 func init() {
 	flag.Parse()
@@ -52,6 +55,8 @@ func TestMain(m *testing.M) {
 func testMain(m *testing.M) int {
 	e := echo.New()
 	db := mysql.ConnectDB(conf.Mysql)
+
+	// migration.Up(conf.Mysql.DSN)
 	err := mysql.CleanUpTestData(db)
 	if err != nil {
 		panic(err)
@@ -68,9 +73,6 @@ func testMain(m *testing.M) int {
 	go func() {
 		e.Start(fmt.Sprintf(":%d", conf.Port))
 	}()
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-	e.Shutdown(context.Background())
-	return 0
+	defer e.Shutdown(context.Background())
+	return m.Run()
 }

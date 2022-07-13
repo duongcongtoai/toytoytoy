@@ -96,6 +96,34 @@ func (q *Queries) GetWager(ctx context.Context, id int64) (Wager, error) {
 	return i, err
 }
 
+const getWagerForUpdate = `-- name: GetWagerForUpdate :one
+SELECT
+	id, total_wager_value, odds, selling_percentage, selling_price, current_selling_price, percentage_sold, amount_sold, placed_at
+FROM
+	wagers
+WHERE
+	id = ?
+LIMIT
+	1 FOR UPDATE
+`
+
+func (q *Queries) GetWagerForUpdate(ctx context.Context, id int64) (Wager, error) {
+	row := q.db.QueryRowContext(ctx, getWagerForUpdate, id)
+	var i Wager
+	err := row.Scan(
+		&i.ID,
+		&i.TotalWagerValue,
+		&i.Odds,
+		&i.SellingPercentage,
+		&i.SellingPrice,
+		&i.CurrentSellingPrice,
+		&i.PercentageSold,
+		&i.AmountSold,
+		&i.PlacedAt,
+	)
+	return i, err
+}
+
 const getWagers = `-- name: GetWagers :many
 SELECT
 	id, total_wager_value, odds, selling_percentage, selling_price, current_selling_price, percentage_sold, amount_sold, placed_at

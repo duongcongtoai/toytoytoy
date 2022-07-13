@@ -18,6 +18,16 @@ WHERE
 LIMIT
 	1;
 
+-- name: GetWagerForUpdate :one
+SELECT
+	*
+FROM
+	wagers
+WHERE
+	id = ?
+LIMIT
+	1 FOR UPDATE;
+
 -- name: CreateWager :execresult
 INSERT INTO
 	wagers (

@@ -41,7 +41,6 @@ func init() {
 
 func main() {
 	e := echo.New()
-	fmt.Printf("here %v\n", conf.Mysql.DSN)
 	migration.Up(conf.Mysql.DSN)
 
 	db := mysql.ConnectDB(conf.Mysql)

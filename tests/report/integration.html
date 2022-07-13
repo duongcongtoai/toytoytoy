@@ -3,6 +3,7 @@
 <html>
 	<head>
 		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>mysql: Go Coverage Report</title>
 		<style>
 			body {
 				background: black;
@@ -54,15 +55,17 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/duongcongtoai/toytoytoy/internal/storages/psql/storage.go (49.1%)</option>
+				<option value="file0">github.com/duongcongtoai/toytoytoy/internal/infras/mysql/db.go (72.7%)</option>
 				
-				<option value="file1">github.com/duongcongtoai/toytoytoy/internal/transport/http/api.go (79.6%)</option>
+				<option value="file1">github.com/duongcongtoai/toytoytoy/internal/services/error.go (0.0%)</option>
 				
-				<option value="file2">github.com/duongcongtoai/toytoytoy/internal/transport/http/middleware.go (77.8%)</option>
+				<option value="file2">github.com/duongcongtoai/toytoytoy/internal/services/purchase.go (78.8%)</option>
 				
-				<option value="file3">github.com/duongcongtoai/toytoytoy/internal/usecase/auth.go (73.9%)</option>
+				<option value="file3">github.com/duongcongtoai/toytoytoy/internal/services/wager.go (64.7%)</option>
 				
-				<option value="file4">github.com/duongcongtoai/toytoytoy/internal/usecase/task.go (83.3%)</option>
+				<option value="file4">github.com/duongcongtoai/toytoytoy/internal/transport/http/api.go (45.3%)</option>
+				
+				<option value="file5">github.com/duongcongtoai/toytoytoy/internal/util/db.go (100.0%)</option>
 				
 				</select>
 			</div>
@@ -76,528 +79,529 @@
 		</div>
 		<div id="content">
 		
-		<pre class="file" id="file0" style="display: none">//Package psql
-package psql
+		<pre class="file" id="file0" style="display: none">package mysql
 
 import (
         "context"
         "database/sql"
-        "errors"
-        "fmt"
         "time"
 
-        "github.com/duongcongtoai/toytoytoy/internal/lock"
-
-        "github.com/lib/pq"
-        "github.com/duongcongtoai/toytoytoy/internal/domain"
+        "github.com/duongcongtoai/toytoytoy/sqlc/togo"
+        _ "github.com/go-sql-driver/mysql"
 )
 
-type Storage struct {
-        db          *sql.DB
-        lock        lock.Lock
-        addTaskFunc func(domain.Task, int) error
-        conf        Config
-        //TODO
-        //consider followings for distributed lock:
-        //- https://pkg.go.dev/go.etcd.io/etcd/clientv3/concurrency
-        //- https://github.com/go-redsync/redsync
-}
-
 type Config struct {
-        ConnString      string
-        SleepOnConflict time.Duration
-        RetryOnConflict int
+        DSN             string
+        MaxConnIdleTime time.Duration
+        MaxIdleConn     int
+        MaxOpenConn     int
 }
 
-//NewStorage return new psql storage
-func NewStorage(c Config) (*Storage, error) <span class="cov8" title="1">{
-        if c.RetryOnConflict &lt; 1 </span><span class="cov0" title="0">{
-                return nil, fmt.Errorf("total retry must be &gt; 0")
-        }</span>
-        <span class="cov8" title="1">db, err := sql.Open("postgres", c.ConnString)
+func ConnectDB(c Config) *sql.DB <span class="cov8" title="1">{
+        db, err := sql.Open("mysql", c.DSN)
         if err != nil </span><span class="cov0" title="0">{
-                return nil, err
-        }</span>
-        <span class="cov8" title="1">s := &amp;Storage{
-                db:   db,
-                conf: c,
+                panic(err)</span>
         }
-        s.addTaskFunc = s.addTaskWithTransaction
-
-        return s, nil</span>
+        <span class="cov8" title="1">db.SetConnMaxIdleTime(c.MaxConnIdleTime)
+        db.SetMaxIdleConns(c.MaxIdleConn)
+        db.SetMaxOpenConns(c.MaxOpenConn)
+        return db</span>
 }
-
-//WithLock Allow user to specify custom lock like etcd, redis
-func (s *Storage) WithLock(l lock.Lock) <span class="cov0" title="0">{
-        s.lock = l
-        s.addTaskFunc = s.addTaskWithLock
-}</span>
-
-//CleanupDB Used to cleanup test env only
-func (s *Storage) CleanupDB() error <span class="cov8" title="1">{
-        _, err := s.db.Exec("DELETE from tasks")
+func CleanUpTestData(db *sql.DB) error <span class="cov8" title="1">{
+        _, err := db.Exec("TRUNCATE TABLE wagers")
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-
-        <span class="cov8" title="1">_, err = s.db.Exec("DELETE from users")
-        return err</span>
-}
-
-func (s *Storage) addTaskWithTransaction(task domain.Task, limit int) error <span class="cov8" title="1">{
-        for try := 0; try &lt; s.conf.RetryOnConflict; try++ </span><span class="cov8" title="1">{
-                tx, err := s.db.BeginTx(context.Background(), &amp;sql.TxOptions{
-                        Isolation: sql.LevelSerializable,
-                })
-                if err != nil </span><span class="cov0" title="0">{
-                        return err
-                }</span>
-
-                <span class="cov8" title="1">rows := tx.QueryRow("SELECT COUNT(id) FROM tasks where tasks.user_id =$1 and tasks.created_date=$2", task.UserID, task.CreatedDate)
-
-                var result int
-                err = rows.Scan(&amp;result)
-                if err != nil </span><span class="cov0" title="0">{
-                        pgerr, ok := err.(*pq.Error)
-                        //serializable read conflict
-                        if ok &amp;&amp; pgerr.Code == "40001" </span><span class="cov0" title="0">{
-                                time.Sleep(s.conf.SleepOnConflict)
-                                tx.Rollback()
-                                continue</span>
-                        }
-
-                        <span class="cov0" title="0">tx.Rollback()
-                        return err</span>
-                }
-
-                <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
-                        tx.Rollback()
-                        return err
-                }</span>
-                <span class="cov8" title="1">if result &gt;= limit </span><span class="cov8" title="1">{
-                        tx.Rollback()
-                        return domain.TaskLimitReached
-                }</span>
-                <span class="cov8" title="1">ex := `INSERT INTO tasks(id, content, user_id, created_date) VALUES($1,$2,$3,$4)`
-                _, err = tx.Exec(ex, task.ID, task.Content, task.UserID, task.CreatedDate)
-                if err != nil </span><span class="cov0" title="0">{
-                        pgerr, ok := err.(*pq.Error)
-                        //serializable read conflict
-                        if ok &amp;&amp; pgerr.Code == "40001" </span><span class="cov0" title="0">{
-                                tx.Rollback()
-                                time.Sleep(s.conf.SleepOnConflict)
-                                continue</span>
-                        }
-
-                        <span class="cov0" title="0">tx.Rollback()
-                        return err</span>
-                }
-                <span class="cov8" title="1">tx.Commit()
-                return nil</span>
-        }
-        <span class="cov0" title="0">return ErrTooManySerializableConflict</span>
-}
-
-var ErrTooManySerializableConflict = errors.New("max effort resolving concurrent conflict reached")
-
-func (s *Storage) addTaskWithLock(task domain.Task, limit int) error <span class="cov0" title="0">{
-        mutex, err := s.lock.NewMutex(task.UserID)
-        if err != nil </span><span class="cov0" title="0">{
-                return err
-        }</span>
-        <span class="cov0" title="0">err = mutex.Lock()
-        if err != nil </span><span class="cov0" title="0">{
-                return err
-        }</span>
-        <span class="cov0" title="0">defer mutex.Unlock()
-        rows, err := s.db.Query("SELECT count(id) FROM tasks where tasks.user_id =$1 and date(tasks.created_date)=current_date", task.UserID)
-        if err != nil </span><span class="cov0" title="0">{
-                return err
-        }</span>
-        <span class="cov0" title="0">result := 0
-        if !rows.Next() </span><span class="cov0" title="0">{
-                return fmt.Errorf("count query received unexpected no row")
-        }</span>
-        <span class="cov0" title="0">err = rows.Scan(&amp;result)
-        if err != nil </span><span class="cov0" title="0">{
-                return fmt.Errorf("unexpected error scanning count tasks: %s", err)
-        }</span>
-
-        <span class="cov0" title="0">if result &gt;= limit </span><span class="cov0" title="0">{
-                return domain.TaskLimitReached
-        }</span>
-        <span class="cov0" title="0">ex := `INSERT INTO tasks(id, content, user_id, created_date) VALUES($1,$2,$3,$4)`
-        _, err = s.db.Exec(ex, task.ID, task.Content, task.UserID, task.CreatedDate)
-        if err != nil </span><span class="cov0" title="0">{
-                return err
-        }</span>
-        <span class="cov0" title="0">return nil</span>
-}
-
-func (s *Storage) AddTaskWithLimitPerDay(task domain.Task, limit int) error <span class="cov8" title="1">{
-        return s.addTaskFunc(task, limit)
-}</span>
-
-func (s *Storage) GetTasksByUserIDAndDate(userID string, date string) ([]domain.Task, error) <span class="cov8" title="1">{
-        rows, err := s.db.Query(
-                "SELECT id,content,user_id,created_date FROM tasks where tasks.user_id =$1 and tasks.created_date=$2",
-                userID, date)
-        if err != nil </span><span class="cov0" title="0">{
-                return nil, err
-        }</span>
-        <span class="cov8" title="1">result := []domain.Task{}
-
-        for rows.Next() </span><span class="cov8" title="1">{
-                var t domain.Task
-                err := rows.Scan(&amp;t.ID, &amp;t.Content, &amp;t.UserID, &amp;t.CreatedDate)
-                if err != nil </span><span class="cov0" title="0">{
-                        return nil, err
-                }</span>
-                <span class="cov8" title="1">result = append(result, t)</span>
-        }
-        <span class="cov8" title="1">return result, nil</span>
-}
-
-func (s *Storage) FindUserByID(userID string) (domain.User, error) <span class="cov8" title="1">{
-        rows, err := s.db.Query("SELECT id,password,max_todo FROM users where id =$1", userID)
-        empty := domain.User{}
-        if err != nil </span><span class="cov0" title="0">{
-                return empty, err
-        }</span>
-        <span class="cov8" title="1">if !rows.Next() </span><span class="cov0" title="0">{
-                return empty, domain.UserNotFound(userID)
-        }</span>
-        <span class="cov8" title="1">err = rows.Scan(&amp;empty.ID, &amp;empty.Password, &amp;empty.MaxTasksPerDay)
-        if err != nil </span><span class="cov0" title="0">{
-                return empty, err
-        }</span>
-        <span class="cov8" title="1">return empty, nil</span>
-}
-
-func (s *Storage) CreateUser(user domain.User) error <span class="cov8" title="1">{
-        _, err := s.db.Exec("INSERT INTO users(id, password, max_todo) VALUES ($1,$2,$3)", user.ID, user.Password, user.MaxTasksPerDay)
+        <span class="cov8" title="1">_, err = db.Exec("TRUNCATE TABLE purchases")
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
         <span class="cov8" title="1">return nil</span>
 }
 
-func (s *Storage) GetUserTasksPerDay(userID string) (int, error) <span class="cov8" title="1">{
-        rows, err := s.db.Query("SELECT max_todo FROM users where users.id =$1", userID)
+type WagerRepo struct {
+}
+type PurchaseRepo struct {
+}
+
+func (s *WagerRepo) GetWagerForUpdate(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error) <span class="cov8" title="1">{
+        return togo.New(db).GetWagerForUpdate(ctx, id)
+}</span>
+
+func (s *WagerRepo) GetWager(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error) <span class="cov0" title="0">{
+        return togo.New(db).GetWager(ctx, id)
+}</span>
+func (s *WagerRepo) GetWagers(ctx context.Context, db togo.DBTX, arg togo.GetWagersParams) ([]togo.Wager, error) <span class="cov0" title="0">{
+        return togo.New(db).GetWagers(ctx, arg)
+}</span>
+
+func (s *WagerRepo) CreateWager(ctx context.Context, db togo.DBTX, arg togo.CreateWagerParams) (togo.Wager, error) <span class="cov8" title="1">{
+        ret, err := togo.New(db).CreateWager(ctx, arg)
         if err != nil </span><span class="cov0" title="0">{
-                return 0, err
+                return togo.Wager{}, err
         }</span>
-        <span class="cov8" title="1">if !rows.Next() </span><span class="cov0" title="0">{
-                return 0, domain.UserNotFound(userID)
-        }</span>
-        <span class="cov8" title="1">var result int
-        err = rows.Scan(&amp;result)
+        <span class="cov8" title="1">id, err := ret.LastInsertId()
         if err != nil </span><span class="cov0" title="0">{
-                return 0, err
+                return togo.Wager{}, err
         }</span>
-        <span class="cov8" title="1">return result, nil</span>
+        <span class="cov8" title="1">return togo.Wager{
+                ID:                  id,
+                TotalWagerValue:     arg.TotalWagerValue,
+                Odds:                arg.Odds,
+                SellingPercentage:   arg.SellingPercentage,
+                SellingPrice:        arg.SellingPrice,
+                CurrentSellingPrice: arg.CurrentSellingPrice,
+                PercentageSold:      arg.PercentageSold,
+                AmountSold:          arg.AmountSold,
+                PlacedAt:            arg.PlacedAt,
+        }, nil</span>
+}
+
+func (s *WagerRepo) UpdateWager(ctx context.Context, db togo.DBTX, arg togo.UpdateWagerParams) error <span class="cov8" title="1">{
+        _, err := togo.New(db).UpdateWager(ctx, arg)
+        return err
+}</span>
+
+func (s *PurchaseRepo) CreatePurchase(ctx context.Context, db togo.DBTX, arg togo.CreatePurchaseParams) (togo.Purchase, error) <span class="cov8" title="1">{
+        ret, err := togo.New(db).CreatePurchase(ctx, arg)
+        if err != nil </span><span class="cov0" title="0">{
+                return togo.Purchase{}, nil
+        }</span>
+        <span class="cov8" title="1">id, err := ret.LastInsertId()
+        if err != nil </span><span class="cov0" title="0">{
+                return togo.Purchase{}, err
+        }</span>
+        <span class="cov8" title="1">return togo.Purchase{
+                ID:          id,
+                WagerID:     arg.WagerID,
+                BuyingPrice: arg.BuyingPrice,
+                BoughtAt:    arg.BoughtAt,
+        }, nil</span>
 }
 </pre>
 		
-		<pre class="file" id="file1" style="display: none">package http
+		<pre class="file" id="file1" style="display: none">package services
 
-import (
-        "errors"
-        "fmt"
-        "net/http"
-        "time"
+import "net/http"
 
-        "github.com/dgrijalva/jwt-go"
-        "github.com/google/uuid"
-        "github.com/labstack/echo/v4"
-        "github.com/duongcongtoai/toytoytoy/internal/domain"
+type AppError struct {
+        Code int
+        Desc string
+}
+
+func (a AppError) Error() string <span class="cov0" title="0">{
+        return a.Desc
+}</span>
+
+var (
+        ErrInvalidSellingPrice = AppError{
+                Code: http.StatusBadRequest,
+                Desc: "INVALID SELLING PRICE",
+        }
+        ErrBuyingPriceExceedSellingPrice = AppError{
+                Code: http.StatusBadRequest,
+                Desc: "BUYING PRICE EXCEEDS SELLING PRICE",
+        }
 )
 
-type APIConf struct {
-        JWTSecret string
-        TokenExp  time.Duration
+func InvalidReqErr(detail string) error <span class="cov0" title="0">{
+        return AppError{
+                Code: http.StatusBadRequest,
+                Desc: detail,
+        }
+
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package services
+
+import (
+        "context"
+        "database/sql"
+        "fmt"
+        "math"
+        "strconv"
+        "time"
+
+        "github.com/duongcongtoai/toytoytoy/internal/util"
+        "github.com/duongcongtoai/toytoytoy/sqlc/togo"
+)
+
+func NewPurchaseSvc(db DBX, wagerRepo WagerRepo, purchaseRepo PurchaseRepo) *PurchaseSvc <span class="cov8" title="1">{
+        return &amp;PurchaseSvc{db: db, wagerRepo: wagerRepo, purchaseRepo: purchaseRepo}
+}</span>
+
+type PurchaseSvc struct {
+        db           DBX
+        wagerRepo    WagerRepo
+        purchaseRepo PurchaseRepo
 }
+
+type PurchaseRepo interface {
+        CreatePurchase(ctx context.Context, db togo.DBTX, arg togo.CreatePurchaseParams) (togo.Purchase, error)
+}
+
+func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice float64) (togo.Purchase, error) <span class="cov8" title="1">{
+        tx, err := s.db.BeginTx(ctx, &amp;sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+        if err != nil </span><span class="cov0" title="0">{
+                return togo.Purchase{}, err
+        }</span>
+        <span class="cov8" title="1">var purchase togo.Purchase
+        err = util.ExecWithTx(ctx, tx, func(ctx context.Context, tx *sql.Tx) error </span><span class="cov8" title="1">{
+                wager, err := s.wagerRepo.GetWagerForUpdate(ctx, tx, wagerID)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">curSellingPrice, err := strconv.ParseFloat(wager.CurrentSellingPrice, 64)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+
+                <span class="cov8" title="1">curSellingPrice = curSellingPrice - buyingPrice
+                if curSellingPrice &lt; 0.0 </span><span class="cov8" title="1">{
+                        return ErrBuyingPriceExceedSellingPrice
+                }</span>
+                <span class="cov8" title="1">amountSold := 0.0
+                if wager.AmountSold.Valid </span><span class="cov8" title="1">{
+                        amountSold, err = strconv.ParseFloat(wager.AmountSold.String, 64)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return err
+                        }</span>
+                }
+
+                <span class="cov8" title="1">amountSold += buyingPrice
+                originalSellingPrice, err := strconv.ParseFloat(wager.SellingPrice, 64)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">percentageSold := math.RoundToEven(amountSold / originalSellingPrice * 100)
+                err = s.wagerRepo.UpdateWager(ctx, tx, togo.UpdateWagerParams{
+                        CurrentSellingPrice: fmt.Sprintf("%.2f", curSellingPrice),
+                        AmountSold:          sql.NullString{String: fmt.Sprintf("%.2f", amountSold), Valid: true},
+                        PercentageSold:      sql.NullInt32{Valid: true, Int32: int32(percentageSold)},
+                        ID:                  wagerID,
+                })
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">purchase, err = s.purchaseRepo.CreatePurchase(ctx, tx, togo.CreatePurchaseParams{WagerID: wagerID,
+                        BuyingPrice: sql.NullString{Valid: true, String: fmt.Sprintf("%.2f", buyingPrice)},
+                        BoughtAt:    time.Now(),
+                })
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">return err</span>
+        })
+        <span class="cov8" title="1">return purchase, err</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package services
+
+import (
+        "context"
+        "database/sql"
+        "strconv"
+        "time"
+
+        "github.com/duongcongtoai/toytoytoy/sqlc/togo"
+)
+
+type DBX interface {
+        togo.DBTX
+        BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+        Begin() (*sql.Tx, error)
+}
+
+func NewWagerSvc(db DBX, wagerRepo WagerRepo) *WagerSvc <span class="cov8" title="1">{
+        return &amp;WagerSvc{db: db, wagerRepo: wagerRepo}
+}</span>
+
+type WagerSvc struct {
+        // we accept leaking implementation details, because eventually, we require underneath storage implementation to support transaction
+        db        DBX
+        wagerRepo WagerRepo
+}
+
+type WagerRepo interface {
+        GetWager(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error)
+        GetWagerForUpdate(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error)
+        GetWagers(ctx context.Context, db togo.DBTX, arg togo.GetWagersParams) ([]togo.Wager, error)
+        CreateWager(ctx context.Context, db togo.DBTX, arg togo.CreateWagerParams) (togo.Wager, error)
+        UpdateWager(ctx context.Context, db togo.DBTX, arg togo.UpdateWagerParams) error
+}
+
+func (s *WagerSvc) GetWager(ctx context.Context, id int64) (togo.Wager, error) <span class="cov0" title="0">{
+        return s.wagerRepo.GetWager(ctx, s.db, id)
+}</span>
+func (s *WagerSvc) GetWagers(ctx context.Context, limit int32, offset int32) ([]togo.Wager, error) <span class="cov0" title="0">{
+        return s.wagerRepo.GetWagers(ctx, s.db, togo.GetWagersParams{Limit: limit, Offset: offset})
+}</span>
+func (s *WagerSvc) PlaceWager(ctx context.Context, wager togo.Wager) (togo.Wager, error) <span class="cov8" title="1">{
+        err := ValidateWager(wager)
+        if err != nil </span><span class="cov0" title="0">{
+                return togo.Wager{}, err
+        }</span>
+        <span class="cov8" title="1">wager, err = s.wagerRepo.CreateWager(ctx, s.db, togo.CreateWagerParams{
+                TotalWagerValue:     wager.TotalWagerValue,
+                Odds:                wager.Odds,
+                SellingPercentage:   wager.SellingPercentage,
+                SellingPrice:        wager.SellingPrice,
+                CurrentSellingPrice: wager.SellingPrice,
+                PlacedAt:            time.Now(),
+        })
+        return wager, err</span>
+}
+
+func ValidateWager(wager togo.Wager) error <span class="cov8" title="1">{
+        fsellingPrice, err := strconv.ParseFloat(wager.SellingPrice, 64)
+        if err != nil </span><span class="cov0" title="0">{
+                return InvalidReqErr(err.Error())
+        }</span>
+        <span class="cov8" title="1">priceFloor := float64(wager.TotalWagerValue) * float64(wager.SellingPercentage) / 100
+        if fsellingPrice &lt;= priceFloor </span><span class="cov0" title="0">{
+                return ErrInvalidSellingPrice
+        }</span>
+        <span class="cov8" title="1">if fsellingPrice &lt; 0.0 </span><span class="cov0" title="0">{
+                return ErrInvalidSellingPrice
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package http
+
+import (
+        "fmt"
+        "net/http"
+        "strconv"
+        "time"
+
+        "github.com/duongcongtoai/toytoytoy/internal/services"
+        "github.com/duongcongtoai/toytoytoy/sqlc/togo"
+        "github.com/labstack/echo/v4"
+)
 
 type HttpAPI struct {
-        conf        APIConf
-        taskUseCase domain.TaskUseCase
-        userUseCase domain.AuthUseCase
+        wagerSvc    *services.WagerSvc
+        purchaseSvc *services.PurchaseSvc
 }
 
-func BindAPI(conf APIConf, e *echo.Echo, taskUseCase domain.TaskUseCase, userUseCase domain.AuthUseCase) *HttpAPI <span class="cov8" title="1">{
+func BindAPI(e *echo.Echo, wagerSvc *services.WagerSvc, purchaseSvc *services.PurchaseSvc) *HttpAPI <span class="cov8" title="1">{
         result := &amp;HttpAPI{
-                conf:        conf,
-                taskUseCase: taskUseCase,
-                userUseCase: userUseCase,
+                wagerSvc:    wagerSvc,
+                purchaseSvc: purchaseSvc,
         }
-        e.POST("/login", result.Login)
-        jwtmw := jwtAuthMiddleware([]byte(conf.JWTSecret))
-        e.GET("/tasks", result.ListTasks, jwtmw)
-        e.POST("/tasks", result.AddTask, jwtmw)
+        e.POST("/buy/:wager_id", result.BuyWager)
+        e.POST("/wagers", result.PlaceWager)
+        e.GET("/wagers", result.ListWagers)
         return result
 }</span>
 
-type LoginInput struct {
-        UserID   string `json:"user_id"`
-        Password string `json:"password"`
+type PlaceWagerReq struct {
+        TotalWagerValue   int     `json:"total_wager_value"`
+        Odds              int     `json:"odds"`
+        SellingPercentage int     `json:"selling_percentage"`
+        SellingPrice      float64 `json:"selling_price"`
 }
 
-func (h *HttpAPI) Login(ctx echo.Context) error <span class="cov8" title="1">{
-        var input LoginInput
-        err := ctx.Bind(&amp;input)
-        if err != nil </span><span class="cov0" title="0">{
-                return fmt.Errorf("error binding value: %s", err)
-        }</span>
-
-        <span class="cov8" title="1">ok, err := h.userUseCase.ValidateUser(input.UserID, input.Password)
-        if err != nil </span><span class="cov0" title="0">{
-                return ctx.JSON(http.StatusInternalServerError, nil)
-        }</span>
-        <span class="cov8" title="1">if !ok </span><span class="cov0" title="0">{
-                return ctx.JSON(http.StatusUnauthorized, map[string]interface{}{
-                        "error": "incorrect user_id/pwd",
-                })
-        }</span>
-        <span class="cov8" title="1">token, err := h.createToken(input.UserID)
-
-        if err != nil </span><span class="cov0" title="0">{
-                return ctx.JSON(http.StatusInternalServerError, nil)
-        }</span>
-        <span class="cov8" title="1">return ctx.JSON(http.StatusOK, map[string]string{
-                "data": token,
-        })</span>
-}
-
-func (h *HttpAPI) createToken(id string) (string, error) <span class="cov8" title="1">{
-        atClaims := jwt.MapClaims{}
-        atClaims["user_id"] = id
-        atClaims["exp"] = time.Now().Add(h.conf.TokenExp).Unix()
-        at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
-        token, err := at.SignedString([]byte(h.conf.JWTSecret))
-        if err != nil </span><span class="cov0" title="0">{
-                return "", err
-        }</span>
-        <span class="cov8" title="1">return token, nil</span>
-}
-
-type AddTaskInput struct {
-        Content string `json:"content"`
-}
-
-func (h *HttpAPI) AddTask(ctx echo.Context) error <span class="cov8" title="1">{
-        input := AddTaskInput{}
-        err := ctx.Bind(&amp;input)
-        if err != nil </span><span class="cov0" title="0">{
-                return ctx.JSON(http.StatusBadRequest, nil)
-        }</span>
-
-        <span class="cov8" title="1">userID, ok := userIDFromCtx(ctx)
-        if !ok </span><span class="cov0" title="0">{
-                return ctx.JSON(http.StatusInternalServerError, nil)
-        }</span>
-        <span class="cov8" title="1">t := domain.Task{
-                ID:          uuid.New().String(),
-                UserID:      userID,
-                Content:     input.Content,
-                CreatedDate: time.Now().Format(domain.DateFormat),
-        }
-        err = h.taskUseCase.AddTask(t)
-        if err != nil </span><span class="cov8" title="1">{
-                if errors.Is(err, domain.TaskLimitReached) </span><span class="cov8" title="1">{
-                        return ctx.JSON(http.StatusConflict, map[string]string{
-                                "error": err.Error(),
-                        })
-                }</span>
-                <span class="cov0" title="0">return ctx.JSON(http.StatusInternalServerError, nil)</span>
-        }
-        <span class="cov8" title="1">return ctx.JSON(http.StatusOK, map[string]interface{}{
-                "data": t,
-        })</span>
-}
-
-var userAuthKey = "user_id"
-
-func userIDFromCtx(ctx echo.Context) (string, bool) <span class="cov8" title="1">{
-        userID, ok := ctx.Get(userAuthKey).(string)
-        return userID, ok
-}</span>
-
-func (h *HttpAPI) ListTasks(ctx echo.Context) error <span class="cov8" title="1">{
-        createdDate := ctx.QueryParam("created_date")
-        _, err := time.Parse(domain.DateFormat, createdDate)
-        if err != nil </span><span class="cov0" title="0">{
-                return ctx.JSON(http.StatusBadRequest, nil)
-        }</span>
-        <span class="cov8" title="1">userID, ok := userIDFromCtx(ctx)
-        if !ok </span><span class="cov0" title="0">{
-                return ctx.JSON(http.StatusInternalServerError, nil)
-        }</span>
-        <span class="cov8" title="1">tasks, err := h.taskUseCase.GetTasksByUserIDAndDate(userID, createdDate)
-        if err != nil </span><span class="cov0" title="0">{
-                return ctx.JSON(http.StatusInternalServerError, nil)
-        }</span>
-        <span class="cov8" title="1">return ctx.JSON(http.StatusOK, map[string]interface{}{
-                "data": tasks,
-        })</span>
-}
-</pre>
-		
-		<pre class="file" id="file2" style="display: none">package http
-
-import (
-        "net/http"
-
-        "github.com/dgrijalva/jwt-go"
-        "github.com/labstack/echo/v4"
-)
-
-var (
-        scheme = "Bearer"
-)
-
-func jwtAuthMiddleware(secret []byte) func(echo.HandlerFunc) echo.HandlerFunc <span class="cov8" title="1">{
-        return func(h echo.HandlerFunc) echo.HandlerFunc </span><span class="cov8" title="1">{
-                return func(ctx echo.Context) error </span><span class="cov8" title="1">{
-                        tokenWithScheme := ctx.Request().Header.Get("Authorization")
-                        if len(tokenWithScheme) &lt;= len(scheme)+1 </span><span class="cov0" title="0">{
-                                return ctx.JSON(http.StatusUnauthorized, nil)
-                        }</span>
-                        <span class="cov8" title="1">token := tokenWithScheme[len(scheme)+1:]
-                        claims := make(jwt.MapClaims)
-                        t, err := jwt.ParseWithClaims(token, claims, func(*jwt.Token) (interface{}, error) </span><span class="cov8" title="1">{
-                                return secret, nil
-                        }</span>)
-                        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
-                                return ctx.JSON(http.StatusUnauthorized, nil)
-                        }</span>
-                        <span class="cov8" title="1">if !t.Valid </span><span class="cov0" title="0">{
-                                return ctx.JSON(http.StatusUnauthorized, nil)
-                        }</span>
-                        <span class="cov8" title="1">id, ok := claims["user_id"].(string)
-                        if !ok </span><span class="cov0" title="0">{
-                                return ctx.JSON(http.StatusUnauthorized, nil)
-                        }</span>
-                        //TODO: check token exp
-
-                        <span class="cov8" title="1">ctx.Set(userAuthKey, id)
-                        return h(ctx)</span>
-                }
-        }
-}
-</pre>
-		
-		<pre class="file" id="file3" style="display: none">package usecase
-
-import (
-        "errors"
-        "fmt"
-
-        "github.com/duongcongtoai/toytoytoy/internal/domain"
-        "golang.org/x/crypto/bcrypt"
-)
-
-type AuthUCConf struct {
-        Hash    HashConf
-        Default struct {
-                MaxTaskPerDay int
-        }
-}
-
-type HashConf struct {
-        Secret string
-        Algo   string
-        Cost   int
-}
-
-type userUseCase struct {
-        userStore         domain.UserStore
-        config            AuthUCConf
-        passwordValidator func([]byte, []byte) bool
-        passwordGenerator func([]byte) ([]byte, error)
-}
-
-func NewAuthUseCase(c AuthUCConf, userStore domain.UserStore) (userUseCase, error) <span class="cov8" title="1">{
-        result := userUseCase{
-                config:    c,
-                userStore: userStore,
-        }
-        switch c.Hash.Algo </span>{
-        case "bcrypt":<span class="cov8" title="1">
-                result.passwordValidator = bcryptValidator
-                result.passwordGenerator = bcryptPasswordGenerator(c.Hash.Cost)</span>
-        //TODO: more algorithm supported
-        default:<span class="cov0" title="0">
-                return userUseCase{}, fmt.Errorf("unsupported password hashing alorithm: %s", c.Hash.Algo)</span>
-        }
-        <span class="cov8" title="1">return result, nil</span>
-}
-
-func (u userUseCase) ValidateUser(userID, rawPassword string) (bool, error) <span class="cov8" title="1">{
-        usr, err := u.userStore.FindUserByID(userID)
-        if err != nil </span><span class="cov0" title="0">{
-                if errors.Is(err, domain.UserNotFound(userID)) </span><span class="cov0" title="0">{
-                        return false, nil
-                }</span>
-                <span class="cov0" title="0">return false, err</span>
-        }
-        <span class="cov8" title="1">return u.passwordValidator([]byte(rawPassword), []byte(usr.Password)), nil</span>
-}
-
-func (u userUseCase) CreateUser(id, pswd string) error <span class="cov8" title="1">{
-        hashed, err := u.passwordGenerator([]byte(pswd))
+func (h *HttpAPI) PlaceWager(ctx echo.Context) error <span class="cov8" title="1">{
+        var req PlaceWagerReq
+        err := ctx.Bind(&amp;req)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov8" title="1">return u.userStore.CreateUser(domain.User{
-                ID:             id,
-                Password:       string(hashed),
-                MaxTasksPerDay: u.config.Default.MaxTaskPerDay,
-        })</span>
+        <span class="cov8" title="1">wager, err := h.wagerSvc.PlaceWager(ctx.Request().Context(), DTOToWagerModel(req))
+        if err != nil </span><span class="cov0" title="0">{
+                return ResponseErr(ctx, err)
+        }</span>
+        <span class="cov8" title="1">wagerDTO, err := ModelToWagerItem(wager)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">return ctx.JSON(http.StatusCreated, wagerDTO)</span>
 }
 
-func bcryptValidator(given, hashed []byte) bool <span class="cov8" title="1">{
-        err := bcrypt.CompareHashAndPassword(hashed, given)
-        return err == nil
-}</span>
+func (h *HttpAPI) ListWagers(ctx echo.Context) error <span class="cov0" title="0">{
+        page := ctx.QueryParam("page")
+        limit := ctx.QueryParam("limit")
+        intpage, err := strconv.Atoi(page)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">intlimit, err := strconv.Atoi(limit)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">wagers, err := h.wagerSvc.GetWagers(ctx.Request().Context(), int32(intlimit), int32(intpage))
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov0" title="0">wagerDtos, err := ModelToWagerItems(wagers)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
 
-func bcryptPasswordGenerator(cost int) func([]byte) ([]byte, error) <span class="cov8" title="1">{
-        return func(raw []byte) ([]byte, error) </span><span class="cov8" title="1">{
-                bs, err := bcrypt.GenerateFromPassword(raw, cost)
+        <span class="cov0" title="0">return ctx.JSON(http.StatusOK, wagerDtos)</span>
+}
+func DTOToWagerModel(item PlaceWagerReq) togo.Wager <span class="cov8" title="1">{
+        return togo.Wager{
+                TotalWagerValue:   int32(item.TotalWagerValue),
+                Odds:              int32(item.Odds),
+                SellingPrice:      fmt.Sprintf("%.2f", item.SellingPrice),
+                SellingPercentage: int32(item.SellingPercentage),
+        }
+}</span>
+func ModelToWagerItem(item togo.Wager) (WagerItem, error) <span class="cov8" title="1">{
+        fcursellingPrice, err := strconv.ParseFloat(item.CurrentSellingPrice, 64)
+        if err != nil </span><span class="cov0" title="0">{
+                return WagerItem{}, err
+        }</span>
+        <span class="cov8" title="1">fsellingPrice, err := strconv.ParseFloat(item.SellingPrice, 64)
+        if err != nil </span><span class="cov0" title="0">{
+                return WagerItem{}, err
+        }</span>
+        <span class="cov8" title="1">dto := WagerItem{
+                ID:                  int64(item.ID),
+                TotalWagerValue:     int(item.TotalWagerValue),
+                Odds:                int(item.Odds),
+                SellingPrice:        fsellingPrice,
+                CurrentSellingPrice: fcursellingPrice,
+                SellingPercentage:   int(item.SellingPercentage),
+                PlacedAt:            item.PlacedAt.Format(time.RFC3339),
+        }
+
+        if item.PercentageSold.Valid </span><span class="cov0" title="0">{
+                intPercentageSold := int(item.PercentageSold.Int32)
+                dto.PercentageSold = &amp;intPercentageSold
+        }</span>
+        <span class="cov8" title="1">if item.AmountSold.Valid </span><span class="cov0" title="0">{
+                famountSold, err := strconv.ParseFloat(item.AmountSold.String, 64)
                 if err != nil </span><span class="cov0" title="0">{
-                        return nil, fmt.Errorf("failed to generate password: %s", err)
+                        return WagerItem{}, err
                 }</span>
-                <span class="cov8" title="1">return bs, nil</span>
+                <span class="cov0" title="0">dto.AmountSold = &amp;famountSold</span>
         }
+        <span class="cov8" title="1">return dto, nil</span>
 }
-</pre>
-		
-		<pre class="file" id="file4" style="display: none">package usecase
+func ModelToWagerItems(wagers []togo.Wager) ([]WagerItem, error) <span class="cov0" title="0">{
+        ret := make([]WagerItem, 0, len(wagers))
+        for _, item := range wagers </span><span class="cov0" title="0">{
+                fcursellingPrice, err := strconv.ParseFloat(item.CurrentSellingPrice, 64)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov0" title="0">dto := WagerItem{
+                        ID:                  int64(item.ID),
+                        TotalWagerValue:     int(item.TotalWagerValue),
+                        Odds:                int(item.Odds),
+                        SellingPercentage:   int(item.SellingPercentage),
+                        CurrentSellingPrice: fcursellingPrice,
+                        PlacedAt:            item.PlacedAt.Format(time.RFC3339),
+                }
 
-import "github.com/duongcongtoai/toytoytoy/internal/domain"
-
-type taskUseCase struct {
-        taskStore domain.TaskStore
-        userStore domain.UserStore
-}
-
-func NewTaskUseCase(taskStore domain.TaskStore, userStore domain.UserStore) taskUseCase <span class="cov8" title="1">{
-        return taskUseCase{
-                taskStore: taskStore,
-                userStore: userStore,
+                if item.PercentageSold.Valid </span><span class="cov0" title="0">{
+                        intPercentageSold := int(item.PercentageSold.Int32)
+                        dto.PercentageSold = &amp;intPercentageSold
+                }</span>
+                <span class="cov0" title="0">if item.AmountSold.Valid </span><span class="cov0" title="0">{
+                        famountSold, err := strconv.ParseFloat(item.AmountSold.String, 64)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return nil, err
+                        }</span>
+                        <span class="cov0" title="0">dto.AmountSold = &amp;famountSold</span>
+                }
+                <span class="cov0" title="0">ret = append(ret, dto)</span>
         }
-}</span>
+        <span class="cov0" title="0">return ret, nil</span>
+}
 
-func (u taskUseCase) AddTask(task domain.Task) error <span class="cov8" title="1">{
-        limit, err := u.userStore.GetUserTasksPerDay(task.UserID)
+type WagerItem struct {
+        ID                  int64    `json:"id"`
+        TotalWagerValue     int      `json:"total_wager_value"`
+        Odds                int      `json:"odds"`
+        SellingPercentage   int      `json:"selling_percentage"`
+        SellingPrice        float64  `json:"selling_price"`
+        CurrentSellingPrice float64  `json:"current_selling_price"`
+        PercentageSold      *int     `json:"percentage_sold"`
+        AmountSold          *float64 `json:"amount_sold"`
+        PlacedAt            string   `json:"placed_at"`
+}
+
+type BuyWagerReq struct {
+        BuyingPrice float64 `json:"buying_price"`
+}
+type BuyWagerRes struct {
+        ID          int64   `json:"id"`
+        WagerID     int64   `json:"wager_id"`
+        BuyingPrice float64 `json:"buying_price"`
+        BoughtAt    string  `json:"bought_at"`
+}
+
+func (h *HttpAPI) BuyWager(ctx echo.Context) error <span class="cov8" title="1">{
+        wagerID := ctx.Param("wager_id")
+        intWagerID, err := strconv.Atoi(wagerID)
         if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
-        <span class="cov8" title="1">return u.taskStore.AddTaskWithLimitPerDay(task, limit)</span>
+        <span class="cov8" title="1">var req BuyWagerReq
+        err = ctx.Bind(&amp;req)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">purchase, err := h.purchaseSvc.BuyWager(ctx.Request().Context(), int64(intWagerID), req.BuyingPrice)
+        if err != nil </span><span class="cov8" title="1">{
+                return ResponseErr(ctx, err)
+        }</span>
+        <span class="cov8" title="1">dto, err := ModelToPurchaseDTO(purchase)
+
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">return ctx.JSON(http.StatusCreated, dto)</span>
+}
+func ModelToPurchaseDTO(model togo.Purchase) (BuyWagerRes, error) <span class="cov8" title="1">{
+        fbuyingPrice, err := strconv.ParseFloat(model.BuyingPrice.String, 64)
+        if err != nil </span><span class="cov0" title="0">{
+                return BuyWagerRes{}, err
+        }</span>
+        <span class="cov8" title="1">return BuyWagerRes{
+                ID:          model.ID,
+                WagerID:     model.WagerID,
+                BuyingPrice: fbuyingPrice,
+                BoughtAt:    model.BoughtAt.Format(time.RFC3339),
+        }, nil</span>
 }
 
-func (u taskUseCase) GetTasksByUserIDAndDate(userID string, date string) ([]domain.Task, error) <span class="cov8" title="1">{
-        return u.taskStore.GetTasksByUserIDAndDate(userID, date)
-}</span>
+func ResponseErr(ctx echo.Context, err error) error <span class="cov8" title="1">{
+        if apperr, ok := err.(services.AppError); ok </span><span class="cov8" title="1">{
+                return ctx.JSON(apperr.Code, map[string]string{"error": apperr.Desc})
+        }</span>
+        <span class="cov0" title="0">return err</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package util
+
+import (
+        "context"
+        "database/sql"
+)
+
+func ExecWithTx(ctx context.Context, tx *sql.Tx, f func(context.Context, *sql.Tx) error) error <span class="cov8" title="1">{
+        var err error
+        defer func() </span><span class="cov8" title="1">{
+                if err != nil </span><span class="cov8" title="1">{
+                        _ = tx.Rollback()
+                        return
+                }</span>
+                <span class="cov8" title="1">err = tx.Commit()</span>
+        }()
+        <span class="cov8" title="1">err = f(ctx, tx)
+        return err</span>
+}
 </pre>
 		
 		</div>

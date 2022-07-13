@@ -42,7 +42,7 @@ func (h *HttpAPI) PlaceWager(ctx echo.Context) error {
 	}
 	wager, err := h.wagerSvc.PlaceWager(ctx.Request().Context(), DTOToWagerModel(req))
 	if err != nil {
-		return err
+		return ResponseErr(ctx, err)
 	}
 	wagerDTO, err := ModelToWagerItem(wager)
 	if err != nil {
@@ -86,12 +86,17 @@ func ModelToWagerItem(item togo.Wager) (WagerItem, error) {
 	if err != nil {
 		return WagerItem{}, err
 	}
+	fsellingPrice, err := strconv.ParseFloat(item.SellingPrice, 64)
+	if err != nil {
+		return WagerItem{}, err
+	}
 	dto := WagerItem{
 		ID:                  int64(item.ID),
 		TotalWagerValue:     int(item.TotalWagerValue),
 		Odds:                int(item.Odds),
-		SellingPercentage:   int(item.SellingPercentage),
+		SellingPrice:        fsellingPrice,
 		CurrentSellingPrice: fcursellingPrice,
+		SellingPercentage:   int(item.SellingPercentage),
 		PlacedAt:            item.PlacedAt.Format(time.RFC3339),
 	}
 
@@ -175,7 +180,7 @@ func (h *HttpAPI) BuyWager(ctx echo.Context) error {
 	}
 	purchase, err := h.purchaseSvc.BuyWager(ctx.Request().Context(), int64(intWagerID), req.BuyingPrice)
 	if err != nil {
-		return err
+		return ResponseErr(ctx, err)
 	}
 	dto, err := ModelToPurchaseDTO(purchase)
 
@@ -196,4 +201,11 @@ func ModelToPurchaseDTO(model togo.Purchase) (BuyWagerRes, error) {
 		BuyingPrice: fbuyingPrice,
 		BoughtAt:    model.BoughtAt.Format(time.RFC3339),
 	}, nil
+}
+
+func ResponseErr(ctx echo.Context, err error) error {
+	if apperr, ok := err.(services.AppError); ok {
+		return ctx.JSON(apperr.Code, map[string]string{"error": apperr.Desc})
+	}
+	return err
 }

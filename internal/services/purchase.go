@@ -33,7 +33,7 @@ func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice f
 	}
 	var purchase togo.Purchase
 	err = util.ExecWithTx(ctx, tx, func(ctx context.Context, tx *sql.Tx) error {
-		wager, err := s.wagerRepo.GetWager(ctx, tx, wagerID)
+		wager, err := s.wagerRepo.GetWagerForUpdate(ctx, tx, wagerID)
 		if err != nil {
 			return err
 		}
@@ -44,7 +44,7 @@ func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice f
 
 		curSellingPrice = curSellingPrice - buyingPrice
 		if curSellingPrice < 0.0 {
-			return fmt.Errorf("buying price exceed selling price")
+			return ErrBuyingPriceExceedSellingPrice
 		}
 		amountSold := 0.0
 		if wager.AmountSold.Valid {

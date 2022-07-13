@@ -6,10 +6,12 @@ require (
 	github.com/brpaz/echozap v1.1.3
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.15.2
+	github.com/google/go-cmp v0.5.8
 	github.com/labstack/echo/v4 v4.2.2
 	github.com/spf13/viper v1.12.0
 	github.com/stretchr/testify v1.8.0
 	go.uber.org/zap v1.17.0
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
 
 require (

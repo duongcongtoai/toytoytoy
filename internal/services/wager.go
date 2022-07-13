@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"time"
 
 	"github.com/duongcongtoai/toytoytoy/sqlc/togo"
@@ -26,6 +27,7 @@ type WagerSvc struct {
 
 type WagerRepo interface {
 	GetWager(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error)
+	GetWagerForUpdate(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error)
 	GetWagers(ctx context.Context, db togo.DBTX, arg togo.GetWagersParams) ([]togo.Wager, error)
 	CreateWager(ctx context.Context, db togo.DBTX, arg togo.CreateWagerParams) (togo.Wager, error)
 	UpdateWager(ctx context.Context, db togo.DBTX, arg togo.UpdateWagerParams) error
@@ -38,7 +40,11 @@ func (s *WagerSvc) GetWagers(ctx context.Context, limit int32, offset int32) ([]
 	return s.wagerRepo.GetWagers(ctx, s.db, togo.GetWagersParams{Limit: limit, Offset: offset})
 }
 func (s *WagerSvc) PlaceWager(ctx context.Context, wager togo.Wager) (togo.Wager, error) {
-	wager, err := s.wagerRepo.CreateWager(ctx, s.db, togo.CreateWagerParams{
+	err := ValidateWager(wager)
+	if err != nil {
+		return togo.Wager{}, err
+	}
+	wager, err = s.wagerRepo.CreateWager(ctx, s.db, togo.CreateWagerParams{
 		TotalWagerValue:     wager.TotalWagerValue,
 		Odds:                wager.Odds,
 		SellingPercentage:   wager.SellingPercentage,
@@ -47,4 +53,19 @@ func (s *WagerSvc) PlaceWager(ctx context.Context, wager togo.Wager) (togo.Wager
 		PlacedAt:            time.Now(),
 	})
 	return wager, err
+}
+
+func ValidateWager(wager togo.Wager) error {
+	fsellingPrice, err := strconv.ParseFloat(wager.SellingPrice, 64)
+	if err != nil {
+		return InvalidReqErr(err.Error())
+	}
+	priceFloor := float64(wager.TotalWagerValue) * float64(wager.SellingPercentage) / 100
+	if fsellingPrice <= priceFloor {
+		return ErrInvalidSellingPrice
+	}
+	if fsellingPrice < 0.0 {
+		return ErrInvalidSellingPrice
+	}
+	return nil
 }

@@ -20,6 +20,7 @@ func Up(dburl string) {
 		db, err = sql.Open("mysql", dburl)
 		if err != nil {
 			time.Sleep(3 * time.Second)
+			fmt.Printf("fail to connect to db %s, retrying", err)
 			continue
 		}
 		init = true
@@ -40,7 +41,7 @@ func Up(dburl string) {
 		panic(err)
 	}
 	err = m.Up()
-	if err != nil {
+	if err != nil && err != migrate.ErrNoChange {
 		panic(err)
 	}
 }

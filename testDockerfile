@@ -8,6 +8,7 @@ RUN go mod download
 COPY ./internal ./internal
 COPY ./mock ./mock
 COPY ./cmd ./cmd
+COPY ./sqlc ./sqlc
 COPY ./deploy/testscript.sh ./testscript.sh
 
 
