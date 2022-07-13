@@ -1,0 +1,7 @@
+version: 1
+packages:
+  - path: "togo"
+    name: "togo"
+    engine: "mysql"
+    schema: "schema.sql"
+    queries: "query.sql"
