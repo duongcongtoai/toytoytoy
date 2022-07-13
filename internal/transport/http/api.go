@@ -11,20 +11,13 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-type APIConf struct {
-	JWTSecret string
-	TokenExp  time.Duration
-}
-
 type HttpAPI struct {
-	conf        APIConf
-	wagerSvc    services.WagerSvc
-	purchaseSvc services.PurchaseSvc
+	wagerSvc    *services.WagerSvc
+	purchaseSvc *services.PurchaseSvc
 }
 
-func BindAPI(conf APIConf, e *echo.Echo, wagerSvc services.WagerSvc, purchaseSvc services.PurchaseSvc) *HttpAPI {
+func BindAPI(e *echo.Echo, wagerSvc *services.WagerSvc, purchaseSvc *services.PurchaseSvc) *HttpAPI {
 	result := &HttpAPI{
-		conf:        conf,
 		wagerSvc:    wagerSvc,
 		purchaseSvc: purchaseSvc,
 	}

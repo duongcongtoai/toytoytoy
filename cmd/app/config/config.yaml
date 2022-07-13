@@ -1,0 +1,6 @@
+Mysql:
+  DSN: johndoe:pswd@tcp(db:3306)/johndoe
+  MaxConnIdleTime: 3m
+  MaxIdleConn: 10
+  MaxOpenConn: 10
+Port: 8080

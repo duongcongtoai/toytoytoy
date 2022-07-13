@@ -1,4 +1,4 @@
-package main
+package test
 
 import (
 	"context"
@@ -7,9 +7,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"testing"
 
 	"github.com/brpaz/echozap"
-	"github.com/duongcongtoai/toytoytoy/cmd/migration"
 	"github.com/duongcongtoai/toytoytoy/internal/infras/mysql"
 	"github.com/duongcongtoai/toytoytoy/internal/services"
 	"github.com/duongcongtoai/toytoytoy/internal/transport/http"
@@ -24,7 +24,12 @@ var (
 		Port  int
 	}
 	configPath = flag.String("config", "/configs/config.yaml", "path to config file")
+	ServerHost = "db_test"
 )
+
+func getServerAddr() string {
+	return fmt.Sprintf("%s:%d", ServerHost, conf.Port)
+}
 
 func init() {
 	flag.Parse()
@@ -33,18 +38,24 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
 	err = viper.Unmarshal(&conf)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func main() {
-	e := echo.New()
-	fmt.Printf("here %v\n", conf.Mysql.DSN)
-	migration.Up(conf.Mysql.DSN)
+func TestMain(m *testing.M) {
+	os.Exit(testMain(m))
+}
 
+func testMain(m *testing.M) int {
+	e := echo.New()
 	db := mysql.ConnectDB(conf.Mysql)
+	err := mysql.CleanUpTestData(db)
+	if err != nil {
+		panic(err)
+	}
 	zapLogger, _ := zap.NewProduction()
 
 	e.Use(echozap.ZapLogger(zapLogger))
@@ -61,4 +72,5 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 	e.Shutdown(context.Background())
+	return 0
 }

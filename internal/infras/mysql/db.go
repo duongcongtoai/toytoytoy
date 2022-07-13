@@ -9,29 +9,48 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-func initDB() *sql.DB {
-	db, err := sql.Open("mysql", "user:password@/dbname")
+type Config struct {
+	DSN             string
+	MaxConnIdleTime time.Duration
+	MaxIdleConn     int
+	MaxOpenConn     int
+}
+
+func ConnectDB(c Config) *sql.DB {
+	db, err := sql.Open("mysql", c.DSN)
 	if err != nil {
 		panic(err)
 	}
-	db.SetConnMaxIdleTime(time.Minute * 3)
-	db.SetMaxIdleConns(10)
-	db.SetMaxOpenConns(10)
+	db.SetConnMaxIdleTime(c.MaxConnIdleTime)
+	db.SetMaxIdleConns(c.MaxIdleConn)
+	db.SetMaxOpenConns(c.MaxOpenConn)
 	return db
-
+}
+func CleanUpTestData(db *sql.DB) error {
+	_, err := db.Exec("TRUNCATE TABLE wagers")
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("TRUNCATE TABLE purchases")
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-type Mysql struct {
+type WagerRepo struct {
+}
+type PurchaseRepo struct {
 }
 
-func (s *Mysql) GetWager(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error) {
+func (s *WagerRepo) GetWager(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error) {
 	return togo.New(db).GetWager(ctx, id)
 }
-func (s *Mysql) GetWagers(ctx context.Context, db togo.DBTX, arg togo.GetWagersParams) ([]togo.Wager, error) {
+func (s *WagerRepo) GetWagers(ctx context.Context, db togo.DBTX, arg togo.GetWagersParams) ([]togo.Wager, error) {
 	return togo.New(db).GetWagers(ctx, arg)
 }
 
-func (s *Mysql) CreateWager(ctx context.Context, db togo.DBTX, arg togo.CreateWagerParams) (togo.Wager, error) {
+func (s *WagerRepo) CreateWager(ctx context.Context, db togo.DBTX, arg togo.CreateWagerParams) (togo.Wager, error) {
 	ret, err := togo.New(db).CreateWager(ctx, arg)
 	if err != nil {
 		return togo.Wager{}, err
@@ -53,11 +72,12 @@ func (s *Mysql) CreateWager(ctx context.Context, db togo.DBTX, arg togo.CreateWa
 	}, nil
 }
 
-func (s *Mysql) UpdateWager(ctx context.Context, db togo.DBTX, arg togo.UpdateWagerParams) (sql.Result, error) {
-	return togo.New(db).UpdateWager(ctx, arg)
+func (s *WagerRepo) UpdateWager(ctx context.Context, db togo.DBTX, arg togo.UpdateWagerParams) error {
+	_, err := togo.New(db).UpdateWager(ctx, arg)
+	return err
 }
 
-func (s *Mysql) CreatePurchase(ctx context.Context, db togo.DBTX, arg togo.CreatePurchaseParams) (togo.Purchase, error) {
+func (s *PurchaseRepo) CreatePurchase(ctx context.Context, db togo.DBTX, arg togo.CreatePurchaseParams) (togo.Purchase, error) {
 	ret, err := togo.New(db).CreatePurchase(ctx, arg)
 	if err != nil {
 		return togo.Purchase{}, nil

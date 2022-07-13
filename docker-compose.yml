@@ -1,44 +1,41 @@
 version: "3.4"
 services:
   app:
+    restart: on-failure
     build:
       context: .
       dockerfile: ./Dockerfile
+    command: ["./server","--config","/configs/config.yaml"]
     ports:
       - 8080:8080
-      - 4000:4000
-    env_file:
-      - ./cmd/app/env/app.env
     depends_on:
       - db
     volumes:
       - ./tests/report:/src/go/tests/report
-  prometheus:
-    image: prom/prometheus:v2.9.2
-    ports:
-      - 9090:9090
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - 3000:3000
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=secret
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./cmd/app/config/config.yaml:/configs/config.yaml
+      - ./migrations:/migrations
+    networks:
+      - localcluster
   db:
     image: mysql:8
     ports:
       - 3306:3306
-    volumes:
-      - ./data/mysql:/var/lib/mysql
+    # volumes:
+    #   - ./data/mysql:/var/lib/mysql
     environment:
       - MYSQL_ROOT_PASSWORD=pswd
       - MYSQL_PASSWORD=pswd
       - MYSQL_USER=johndoe
       - MYSQL_DATABASE=johndoe
+      - MYSQL_TCP_PORT=3306
+    healthcheck:
+        test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+        timeout: 20s
+        retries: 10
+    networks:
+      - localcluster
+networks:
+  localcluster:
 
 
 
