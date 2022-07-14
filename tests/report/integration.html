@@ -59,11 +59,11 @@
 				
 				<option value="file1">github.com/duongcongtoai/toytoytoy/internal/services/error.go (0.0%)</option>
 				
-				<option value="file2">github.com/duongcongtoai/toytoytoy/internal/services/purchase.go (78.8%)</option>
+				<option value="file2">github.com/duongcongtoai/toytoytoy/internal/services/purchase.go (80.0%)</option>
 				
-				<option value="file3">github.com/duongcongtoai/toytoytoy/internal/services/wager.go (64.7%)</option>
+				<option value="file3">github.com/duongcongtoai/toytoytoy/internal/services/wager.go (76.5%)</option>
 				
-				<option value="file4">github.com/duongcongtoai/toytoytoy/internal/transport/http/api.go (45.3%)</option>
+				<option value="file4">github.com/duongcongtoai/toytoytoy/internal/transport/http/api.go (46.5%)</option>
 				
 				<option value="file5">github.com/duongcongtoai/toytoytoy/internal/util/db.go (100.0%)</option>
 				
@@ -198,6 +198,10 @@ var (
                 Code: http.StatusBadRequest,
                 Desc: "INVALID SELLING PRICE",
         }
+        ErrInvalidBuyingPrice = AppError{
+                Code: http.StatusBadRequest,
+                Desc: "INVALID BUYING PRICE",
+        }
         ErrBuyingPriceExceedSellingPrice = AppError{
                 Code: http.StatusBadRequest,
                 Desc: "BUYING PRICE EXCEEDS SELLING PRICE",
@@ -242,7 +246,10 @@ type PurchaseRepo interface {
 }
 
 func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice float64) (togo.Purchase, error) <span class="cov8" title="1">{
-        tx, err := s.db.BeginTx(ctx, &amp;sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+        if buyingPrice &lt; 0.0 </span><span class="cov8" title="1">{
+                return togo.Purchase{}, ErrInvalidBuyingPrice
+        }</span>
+        <span class="cov8" title="1">tx, err := s.db.BeginTx(ctx, &amp;sql.TxOptions{Isolation: sql.LevelRepeatableRead})
         if err != nil </span><span class="cov0" title="0">{
                 return togo.Purchase{}, err
         }</span>
@@ -340,7 +347,7 @@ func (s *WagerSvc) GetWagers(ctx context.Context, limit int32, offset int32) ([]
 }</span>
 func (s *WagerSvc) PlaceWager(ctx context.Context, wager togo.Wager) (togo.Wager, error) <span class="cov8" title="1">{
         err := ValidateWager(wager)
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
                 return togo.Wager{}, err
         }</span>
         <span class="cov8" title="1">wager, err = s.wagerRepo.CreateWager(ctx, s.db, togo.CreateWagerParams{
@@ -360,7 +367,7 @@ func ValidateWager(wager togo.Wager) error <span class="cov8" title="1">{
                 return InvalidReqErr(err.Error())
         }</span>
         <span class="cov8" title="1">priceFloor := float64(wager.TotalWagerValue) * float64(wager.SellingPercentage) / 100
-        if fsellingPrice &lt;= priceFloor </span><span class="cov0" title="0">{
+        if fsellingPrice &lt;= priceFloor </span><span class="cov8" title="1">{
                 return ErrInvalidSellingPrice
         }</span>
         <span class="cov8" title="1">if fsellingPrice &lt; 0.0 </span><span class="cov0" title="0">{
@@ -413,7 +420,7 @@ func (h *HttpAPI) PlaceWager(ctx echo.Context) error <span class="cov8" title="1
                 return err
         }</span>
         <span class="cov8" title="1">wager, err := h.wagerSvc.PlaceWager(ctx.Request().Context(), DTOToWagerModel(req))
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
                 return ResponseErr(ctx, err)
         }</span>
         <span class="cov8" title="1">wagerDTO, err := ModelToWagerItem(wager)

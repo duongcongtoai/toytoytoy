@@ -27,6 +27,9 @@ type PurchaseRepo interface {
 }
 
 func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice float64) (togo.Purchase, error) {
+	if buyingPrice < 0.0 {
+		return togo.Purchase{}, ErrInvalidBuyingPrice
+	}
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	if err != nil {
 		return togo.Purchase{}, err

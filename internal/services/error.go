@@ -16,6 +16,10 @@ var (
 		Code: http.StatusBadRequest,
 		Desc: "INVALID SELLING PRICE",
 	}
+	ErrInvalidBuyingPrice = AppError{
+		Code: http.StatusBadRequest,
+		Desc: "INVALID BUYING PRICE",
+	}
 	ErrBuyingPriceExceedSellingPrice = AppError{
 		Code: http.StatusBadRequest,
 		Desc: "BUYING PRICE EXCEEDS SELLING PRICE",

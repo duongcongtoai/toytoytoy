@@ -16,7 +16,7 @@ func Up(dburl string) {
 		err  error
 		db   *sql.DB
 	)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		db, err = sql.Open("mysql", dburl)
 		if err != nil {
 			time.Sleep(3 * time.Second)

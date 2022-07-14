@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/brpaz/echozap v1.1.3
+	github.com/bxcodec/faker/v3 v3.8.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.15.2
 	github.com/google/go-cmp v0.5.8

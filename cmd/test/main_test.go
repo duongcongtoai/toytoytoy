@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/brpaz/echozap"
+	"github.com/duongcongtoai/toytoytoy/cmd/migration"
 	"github.com/duongcongtoai/toytoytoy/internal/infras/mysql"
 	"github.com/duongcongtoai/toytoytoy/internal/services"
 	"github.com/duongcongtoai/toytoytoy/internal/transport/http"
@@ -56,7 +57,7 @@ func testMain(m *testing.M) int {
 	e := echo.New()
 	db := mysql.ConnectDB(conf.Mysql)
 
-	// migration.Up(conf.Mysql.DSN)
+	migration.Up(conf.Mysql.DSN)
 	err := mysql.CleanUpTestData(db)
 	if err != nil {
 		panic(err)

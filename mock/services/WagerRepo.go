@@ -57,6 +57,27 @@ func (_m *WagerRepo) GetWager(ctx context.Context, db togo.DBTX, id int64) (togo
 	return r0, r1
 }
 
+// GetWagerForUpdate provides a mock function with given fields: ctx, db, id
+func (_m *WagerRepo) GetWagerForUpdate(ctx context.Context, db togo.DBTX, id int64) (togo.Wager, error) {
+	ret := _m.Called(ctx, db, id)
+
+	var r0 togo.Wager
+	if rf, ok := ret.Get(0).(func(context.Context, togo.DBTX, int64) togo.Wager); ok {
+		r0 = rf(ctx, db, id)
+	} else {
+		r0 = ret.Get(0).(togo.Wager)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, togo.DBTX, int64) error); ok {
+		r1 = rf(ctx, db, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetWagers provides a mock function with given fields: ctx, db, arg
 func (_m *WagerRepo) GetWagers(ctx context.Context, db togo.DBTX, arg togo.GetWagersParams) ([]togo.Wager, error) {
 	ret := _m.Called(ctx, db, arg)

@@ -16,7 +16,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func TestWagerList(t *testing.T) {
+
+}
+
 func TestBuyWagerConcurrently(t *testing.T) {
+	t.Parallel()
 	wagerReq := `
 {
     "total_wager_value": 20,
@@ -86,11 +91,16 @@ func TestBuyWager(t *testing.T) {
 			name:         "invalid buying price",
 			buyingPrice:  21.0,
 			expectedCode: http.StatusBadRequest,
-			expectedErr:  "INVALID BUYING PRICE",
+			expectedErr:  services.ErrBuyingPriceExceedSellingPrice.Desc,
+		},
+		{
+			name:         "negative buying price",
+			buyingPrice:  -1.0,
+			expectedCode: http.StatusBadRequest,
+			expectedErr:  services.ErrInvalidBuyingPrice.Desc,
 		},
 		/** TODO
 		- invalid wager_id
-		- negative buying price
 		- ...
 		**/
 	}
@@ -99,24 +109,38 @@ func TestBuyWager(t *testing.T) {
 			// create wager
 			res, err := http.Post(fmt.Sprintf("http://%s/wagers", getServerAddr()), "application/json", strings.NewReader(commonWagerReq))
 			assert.NoError(t, err)
-			res.Body.Close()
-			assert.Equal(t, item.expectedCode, res.StatusCode)
+			defer res.Body.Close()
+			assert.Equal(t, http.StatusCreated, res.StatusCode)
 
-			// purchase wager
+			var resItem = transhttp.WagerItem{}
+			raw, _ := ioutil.ReadAll(res.Body)
+			err = json.Unmarshal(raw, &resItem)
+			assert.NoError(t, err)
+			createdWager := resItem.ID
+			res2, err := http.Post(fmt.Sprintf("http://%s/buy/%d", getServerAddr(),
+				createdWager), "application/json", strings.NewReader(fmt.Sprintf(`{"buying_price":%.2f}`, item.buyingPrice)))
+			assert.NoError(t, err)
 
+			defer res2.Body.Close()
+			if item.expectedErr != "" {
+				raw, _ := ioutil.ReadAll(res2.Body)
+				var cont = map[string]string{}
+				json.Unmarshal(raw, &cont)
+				assert.Equal(t, item.expectedErr, cont["error"])
+			}
 		})
 
 	}
 }
 
 func TestCreateWager(t *testing.T) {
+	t.Parallel()
 	type TestCase struct {
 		name               string
 		createReq          string
 		expectedCreateRes  string
 		expectedCreateCode int
 	}
-	t.Parallel()
 	tcases := []TestCase{
 		{
 			name: "success",
