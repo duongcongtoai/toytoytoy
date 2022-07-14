@@ -57,7 +57,7 @@
 				
 				<option value="file0">github.com/duongcongtoai/toytoytoy/internal/services/error.go (0.0%)</option>
 				
-				<option value="file1">github.com/duongcongtoai/toytoytoy/internal/services/purchase.go (74.3%)</option>
+				<option value="file1">github.com/duongcongtoai/toytoytoy/internal/services/purchase.go (80.0%)</option>
 				
 				<option value="file2">github.com/duongcongtoai/toytoytoy/internal/services/wager.go (0.0%)</option>
 				
@@ -121,7 +121,6 @@ import (
         "time"
 
         "github.com/duongcongtoai/toytoytoy/internal/common"
-        "github.com/duongcongtoai/toytoytoy/internal/util"
         "github.com/duongcongtoai/toytoytoy/sqlc/togo"
 )
 
@@ -148,7 +147,7 @@ func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice f
                 return togo.Purchase{}, err
         }</span>
         <span class="cov8" title="1">var purchase togo.Purchase
-        err = util.ExecWithTx(ctx, tx, func(ctx context.Context, tx common.Tx) error </span><span class="cov8" title="1">{
+        err = common.ExecWithTx(ctx, tx, func(ctx context.Context, tx common.Tx) error </span><span class="cov8" title="1">{
                 wager, err := s.wagerRepo.GetWagerForUpdate(ctx, tx, wagerID)
                 if err != nil </span><span class="cov8" title="1">{
                         return err
@@ -163,7 +162,7 @@ func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice f
                         return ErrBuyingPriceExceedSellingPrice
                 }</span>
                 <span class="cov8" title="1">amountSold := 0.0
-                if wager.AmountSold.Valid </span><span class="cov0" title="0">{
+                if wager.AmountSold.Valid </span><span class="cov8" title="1">{
                         amountSold, err = strconv.ParseFloat(wager.AmountSold.String, 64)
                         if err != nil </span><span class="cov0" title="0">{
                                 return err

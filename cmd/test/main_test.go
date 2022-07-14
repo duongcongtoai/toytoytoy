@@ -24,7 +24,7 @@ var (
 		Port  int
 	}
 	configPath = flag.String("config", "/configs/config.test.yaml", "path to config file")
-	serverHost = flag.String("serverhost", "app_test", "addr of setup server")
+	serverHost = flag.String("serverhost", "localhost", "addr of setup server")
 )
 
 func getServerAddr() string {

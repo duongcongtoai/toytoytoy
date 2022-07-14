@@ -55,7 +55,7 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/duongcongtoai/toytoytoy/internal/common/mysql.go (75.0%)</option>
+				<option value="file0">github.com/duongcongtoai/toytoytoy/internal/common/mysql.go (83.3%)</option>
 				
 				<option value="file1">github.com/duongcongtoai/toytoytoy/internal/services/error.go (0.0%)</option>
 				
@@ -66,8 +66,6 @@
 				<option value="file4">github.com/duongcongtoai/toytoytoy/internal/storage/db.go (68.4%)</option>
 				
 				<option value="file5">github.com/duongcongtoai/toytoytoy/internal/transport/http/api.go (46.5%)</option>
-				
-				<option value="file6">github.com/duongcongtoai/toytoytoy/internal/util/db.go (100.0%)</option>
 				
 				</select>
 			</div>
@@ -141,6 +139,19 @@ func CleanUpTestData(db *SqlDB) error <span class="cov8" title="1">{
         }</span>
         <span class="cov8" title="1">return nil</span>
 }
+
+func ExecWithTx(ctx context.Context, tx Tx, f func(context.Context, Tx) error) error <span class="cov8" title="1">{
+        var err error
+        defer func() </span><span class="cov8" title="1">{
+                if err != nil </span><span class="cov8" title="1">{
+                        _ = tx.Rollback()
+                        return
+                }</span>
+                <span class="cov8" title="1">err = tx.Commit()</span>
+        }()
+        <span class="cov8" title="1">err = f(ctx, tx)
+        return err</span>
+}
 </pre>
 		
 		<pre class="file" id="file1" style="display: none">package services
@@ -191,7 +202,6 @@ import (
         "time"
 
         "github.com/duongcongtoai/toytoytoy/internal/common"
-        "github.com/duongcongtoai/toytoytoy/internal/util"
         "github.com/duongcongtoai/toytoytoy/sqlc/togo"
 )
 
@@ -218,7 +228,7 @@ func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice f
                 return togo.Purchase{}, err
         }</span>
         <span class="cov8" title="1">var purchase togo.Purchase
-        err = util.ExecWithTx(ctx, tx, func(ctx context.Context, tx common.Tx) error </span><span class="cov8" title="1">{
+        err = common.ExecWithTx(ctx, tx, func(ctx context.Context, tx common.Tx) error </span><span class="cov8" title="1">{
                 wager, err := s.wagerRepo.GetWagerForUpdate(ctx, tx, wagerID)
                 if err != nil </span><span class="cov0" title="0">{
                         return err
@@ -615,28 +625,6 @@ func ResponseErr(ctx echo.Context, err error) error <span class="cov8" title="1"
                 return ctx.JSON(apperr.Code, map[string]string{"error": apperr.Desc})
         }</span>
         <span class="cov0" title="0">return err</span>
-}
-</pre>
-		
-		<pre class="file" id="file6" style="display: none">package util
-
-import (
-        "context"
-
-        "github.com/duongcongtoai/toytoytoy/internal/common"
-)
-
-func ExecWithTx(ctx context.Context, tx common.Tx, f func(context.Context, common.Tx) error) error <span class="cov8" title="1">{
-        var err error
-        defer func() </span><span class="cov8" title="1">{
-                if err != nil </span><span class="cov8" title="1">{
-                        _ = tx.Rollback()
-                        return
-                }</span>
-                <span class="cov8" title="1">err = tx.Commit()</span>
-        }()
-        <span class="cov8" title="1">err = f(ctx, tx)
-        return err</span>
 }
 </pre>
 		

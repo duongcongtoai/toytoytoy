@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/duongcongtoai/toytoytoy/internal/common"
-	"github.com/duongcongtoai/toytoytoy/internal/util"
 	"github.com/duongcongtoai/toytoytoy/sqlc/togo"
 )
 
@@ -36,7 +35,7 @@ func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice f
 		return togo.Purchase{}, err
 	}
 	var purchase togo.Purchase
-	err = util.ExecWithTx(ctx, tx, func(ctx context.Context, tx common.Tx) error {
+	err = common.ExecWithTx(ctx, tx, func(ctx context.Context, tx common.Tx) error {
 		wager, err := s.wagerRepo.GetWagerForUpdate(ctx, tx, wagerID)
 		if err != nil {
 			return err

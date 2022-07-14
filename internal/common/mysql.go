@@ -58,3 +58,16 @@ func CleanUpTestData(db *SqlDB) error {
 	}
 	return nil
 }
+
+func ExecWithTx(ctx context.Context, tx Tx, f func(context.Context, Tx) error) error {
+	var err error
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+			return
+		}
+		err = tx.Commit()
+	}()
+	err = f(ctx, tx)
+	return err
+}
