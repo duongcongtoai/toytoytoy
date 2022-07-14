@@ -37,47 +37,59 @@ func TestBuyWager(t *testing.T) {
 
 	var (
 		nonExistWagerID int64 = 0
-		validWagerID    int64 = 1
-		wagerEnt              = RandomWager(validWagerID)
+		newWagerID      int64 = 1
+		oldWagerID      int64 = 2
+		newWagerEnt           = RandomWager(newWagerID)
+		oldWagerEnt           = RandomWager(oldWagerID)
 
 		validBuyingPrice     = 9.0
 		exceedingBuyingPrice = 11.0
 	)
 
-	wagerEnt.SellingPrice = "10.0"
-	wagerEnt.CurrentSellingPrice = "10.0"
+	// never bought
+	newWagerEnt.SellingPrice = "10.0"
+	newWagerEnt.CurrentSellingPrice = "10.0"
+	newWagerEnt.AmountSold = sql.NullString{}
+
+	// bought
+	oldWagerEnt.SellingPrice = "20.0"
+	oldWagerEnt.CurrentSellingPrice = "15.0"
+	oldWagerEnt.AmountSold = sql.NullString{Valid: true, String: "5.0"}
+	oldWagerEnt.SellingPercentage = 25
 
 	wagerRepo.On("GetWagerForUpdate", mock.Anything, mockTx, nonExistWagerID).
 		Return(togo.Wager{}, fmt.Errorf("non exist wager"))
-	wagerRepo.On("GetWagerForUpdate", mock.Anything, mockTx, validWagerID).
-		Return(wagerEnt, nil)
+	wagerRepo.On("GetWagerForUpdate", mock.Anything, mockTx, newWagerID).
+		Return(newWagerEnt, nil)
+	wagerRepo.On("GetWagerForUpdate", mock.Anything, mockTx, oldWagerID).
+		Return(oldWagerEnt, nil)
 
 	t.Run("non existing wager", func(t *testing.T) {
 		_, err := svc.BuyWager(context.Background(), nonExistWagerID, 1.0)
 		assert.Equal(t, err, fmt.Errorf("non exist wager"))
 	})
 	t.Run("exceeding buying price", func(t *testing.T) {
-		_, err := svc.BuyWager(context.Background(), validWagerID, exceedingBuyingPrice)
+		_, err := svc.BuyWager(context.Background(), newWagerID, exceedingBuyingPrice)
 		assert.Equal(t, err, ErrBuyingPriceExceedSellingPrice)
 	})
 	t.Run("negative buying price", func(t *testing.T) {
-		_, err := svc.BuyWager(context.Background(), validWagerID, -1.0)
+		_, err := svc.BuyWager(context.Background(), newWagerID, -1.0)
 		assert.Equal(t, err, ErrInvalidBuyingPrice)
 	})
-
-	t.Run("success", func(t *testing.T) {
+	// TODO: reorganize so it is less boilerplating
+	t.Run("success first buy", func(t *testing.T) {
 		createPurchaseParam := togo.CreatePurchaseParams{
-			WagerID:     validWagerID,
+			WagerID:     newWagerID,
 			BuyingPrice: sql.NullString{String: fmt.Sprintf("%.2f", validBuyingPrice), Valid: true},
 		}
 		updateWagerParam := togo.UpdateWagerParams{
-			ID:                  validWagerID,
+			ID:                  newWagerID,
 			CurrentSellingPrice: "1.00",
 			PercentageSold:      sql.NullInt32{Int32: 90, Valid: true},
 			AmountSold:          sql.NullString{String: "9.00", Valid: true},
 		}
 		returnedPurchase := togo.Purchase{
-			WagerID:     validWagerID,
+			WagerID:     newWagerID,
 			BuyingPrice: sql.NullString{String: "9.00", Valid: true},
 		}
 		wagerRepo.On("UpdateWager", mock.Anything, mockTx, updateWagerParam).
@@ -88,7 +100,35 @@ func TestBuyWager(t *testing.T) {
 			return reflect.DeepEqual(createPurchaseParam, param)
 		})).Return(returnedPurchase, nil)
 
-		purchase, err := svc.BuyWager(context.Background(), validWagerID, validBuyingPrice)
+		purchase, err := svc.BuyWager(context.Background(), newWagerID, validBuyingPrice)
+		assert.NoError(t, err)
+		assert.Equal(t, returnedPurchase, purchase)
+	})
+
+	t.Run("success second buy", func(t *testing.T) {
+		createPurchaseParam := togo.CreatePurchaseParams{
+			WagerID:     oldWagerID,
+			BuyingPrice: sql.NullString{String: fmt.Sprintf("%.2f", validBuyingPrice), Valid: true},
+		}
+		updateWagerParam := togo.UpdateWagerParams{
+			ID:                  oldWagerID,
+			CurrentSellingPrice: "6.00",
+			PercentageSold:      sql.NullInt32{Int32: 70, Valid: true},
+			AmountSold:          sql.NullString{String: "14.00", Valid: true},
+		}
+		returnedPurchase := togo.Purchase{
+			WagerID:     oldWagerID,
+			BuyingPrice: sql.NullString{String: "9.00", Valid: true},
+		}
+		wagerRepo.On("UpdateWager", mock.Anything, mockTx, updateWagerParam).
+			Return(nil)
+		purchaseRepo.On("CreatePurchase", mock.Anything, mockTx, mock.MatchedBy(func(param togo.CreatePurchaseParams) bool {
+			// time is underterministic
+			createPurchaseParam.BoughtAt = param.BoughtAt
+			return reflect.DeepEqual(createPurchaseParam, param)
+		})).Return(returnedPurchase, nil)
+
+		purchase, err := svc.BuyWager(context.Background(), oldWagerID, validBuyingPrice)
 		assert.NoError(t, err)
 		assert.Equal(t, returnedPurchase, purchase)
 	})
