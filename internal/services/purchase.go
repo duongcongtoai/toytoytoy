@@ -8,16 +8,17 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/duongcongtoai/toytoytoy/internal/common"
 	"github.com/duongcongtoai/toytoytoy/internal/util"
 	"github.com/duongcongtoai/toytoytoy/sqlc/togo"
 )
 
-func NewPurchaseSvc(db DBX, wagerRepo WagerRepo, purchaseRepo PurchaseRepo) *PurchaseSvc {
+func NewPurchaseSvc(db common.DBX, wagerRepo WagerRepo, purchaseRepo PurchaseRepo) *PurchaseSvc {
 	return &PurchaseSvc{db: db, wagerRepo: wagerRepo, purchaseRepo: purchaseRepo}
 }
 
 type PurchaseSvc struct {
-	db           DBX
+	db           common.DBX
 	wagerRepo    WagerRepo
 	purchaseRepo PurchaseRepo
 }
@@ -35,7 +36,7 @@ func (s *PurchaseSvc) BuyWager(ctx context.Context, wagerID int64, buyingPrice f
 		return togo.Purchase{}, err
 	}
 	var purchase togo.Purchase
-	err = util.ExecWithTx(ctx, tx, func(ctx context.Context, tx *sql.Tx) error {
+	err = util.ExecWithTx(ctx, tx, func(ctx context.Context, tx common.Tx) error {
 		wager, err := s.wagerRepo.GetWagerForUpdate(ctx, tx, wagerID)
 		if err != nil {
 			return err

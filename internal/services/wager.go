@@ -2,26 +2,20 @@ package services
 
 import (
 	"context"
-	"database/sql"
 	"strconv"
 	"time"
 
+	"github.com/duongcongtoai/toytoytoy/internal/common"
 	"github.com/duongcongtoai/toytoytoy/sqlc/togo"
 )
 
-type DBX interface {
-	togo.DBTX
-	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
-	Begin() (*sql.Tx, error)
-}
-
-func NewWagerSvc(db DBX, wagerRepo WagerRepo) *WagerSvc {
+func NewWagerSvc(db common.DBX, wagerRepo WagerRepo) *WagerSvc {
 	return &WagerSvc{db: db, wagerRepo: wagerRepo}
 }
 
 type WagerSvc struct {
 	// we accept leaking implementation details, because eventually, we require underneath storage implementation to support transaction
-	db        DBX
+	db        common.DBX
 	wagerRepo WagerRepo
 }
 

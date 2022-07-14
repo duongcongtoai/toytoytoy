@@ -1,42 +1,11 @@
-package mysql
+package storage
 
 import (
 	"context"
-	"database/sql"
-	"time"
 
 	"github.com/duongcongtoai/toytoytoy/sqlc/togo"
 	_ "github.com/go-sql-driver/mysql"
 )
-
-type Config struct {
-	DSN             string
-	MaxConnIdleTime time.Duration
-	MaxIdleConn     int
-	MaxOpenConn     int
-}
-
-func ConnectDB(c Config) *sql.DB {
-	db, err := sql.Open("mysql", c.DSN)
-	if err != nil {
-		panic(err)
-	}
-	db.SetConnMaxIdleTime(c.MaxConnIdleTime)
-	db.SetMaxIdleConns(c.MaxIdleConn)
-	db.SetMaxOpenConns(c.MaxOpenConn)
-	return db
-}
-func CleanUpTestData(db *sql.DB) error {
-	_, err := db.Exec("TRUNCATE TABLE wagers")
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec("TRUNCATE TABLE purchases")
-	if err != nil {
-		return err
-	}
-	return nil
-}
 
 type WagerRepo struct {
 }

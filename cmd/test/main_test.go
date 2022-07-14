@@ -9,8 +9,9 @@ import (
 
 	"github.com/brpaz/echozap"
 	"github.com/duongcongtoai/toytoytoy/cmd/migration"
-	"github.com/duongcongtoai/toytoytoy/internal/infras/mysql"
+	"github.com/duongcongtoai/toytoytoy/internal/common"
 	"github.com/duongcongtoai/toytoytoy/internal/services"
+	"github.com/duongcongtoai/toytoytoy/internal/storage"
 	"github.com/duongcongtoai/toytoytoy/internal/transport/http"
 	"github.com/labstack/echo/v4"
 	"github.com/spf13/viper"
@@ -19,7 +20,7 @@ import (
 
 var (
 	conf struct {
-		Mysql mysql.Config
+		Mysql common.Config
 		Port  int
 	}
 	configPath = flag.String("config", "/configs/config.test.yaml", "path to config file")
@@ -55,10 +56,10 @@ func TestMain(m *testing.M) {
 
 func testMain(m *testing.M) int {
 	e := echo.New()
-	db := mysql.ConnectDB(conf.Mysql)
+	db := common.ConnectDB(conf.Mysql)
 
 	migration.Up(conf.Mysql.DSN)
-	err := mysql.CleanUpTestData(db)
+	err := common.CleanUpTestData(db)
 	if err != nil {
 		panic(err)
 	}
@@ -66,8 +67,8 @@ func testMain(m *testing.M) int {
 
 	e.Use(echozap.ZapLogger(zapLogger))
 
-	wagerSvc := services.NewWagerSvc(db, &mysql.WagerRepo{})
-	purchaseSvc := services.NewPurchaseSvc(db, &mysql.WagerRepo{}, &mysql.PurchaseRepo{})
+	wagerSvc := services.NewWagerSvc(db, &storage.WagerRepo{})
+	purchaseSvc := services.NewPurchaseSvc(db, &storage.WagerRepo{}, &storage.PurchaseRepo{})
 
 	http.BindAPI(e, wagerSvc, purchaseSvc)
 

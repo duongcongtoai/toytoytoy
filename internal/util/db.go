@@ -2,10 +2,11 @@ package util
 
 import (
 	"context"
-	"database/sql"
+
+	"github.com/duongcongtoai/toytoytoy/internal/common"
 )
 
-func ExecWithTx(ctx context.Context, tx *sql.Tx, f func(context.Context, *sql.Tx) error) error {
+func ExecWithTx(ctx context.Context, tx common.Tx, f func(context.Context, common.Tx) error) error {
 	var err error
 	defer func() {
 		if err != nil {

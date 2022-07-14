@@ -1,6 +1,7 @@
 
 gen-mock:
 	mockery --dir internal/services --all --output ./mock/services --outpkg services
+	mockery --dir internal/common --all --output ./mock/common --outpkg common
 gen-sqlc:
 	sqlc generate -f sqlc/sqlc.yaml
 
