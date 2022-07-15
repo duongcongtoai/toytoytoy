@@ -4,7 +4,8 @@
 ./start.sh
 ```
 
-It deploys 2 docker containers: app at 8080 and mysql at 5432
+It deploys 2 docker containers: app at 8080 and mysql at 5432.
+Mysql may take quite long to start on first installation, so the app may log error and keep retrying.
 
 ## Test
 
@@ -35,6 +36,161 @@ The test report is located inside report folder.
 
 ### sqlc
 - Let us write raw query and use tool to generate golang code for those queries
+
+## Manual test
+
+### PlaceWager
+
+```
+curl -i --location --request POST 'http://localhost:8080/wagers' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "total_wager_value": 50,
+    "odds": 7,
+    "selling_percentage": 20,
+    "selling_price": 70
+}'
+```
+
+Response:
+```
+{
+   "id":1,
+   "total_wager_value":50,
+   "odds":7,
+   "selling_percentage":20,
+   "selling_price":70,
+   "current_selling_price":70,
+   "percentage_sold":null,
+   "amount_sold":null,
+   "placed_at":"2022-07-15T00:10:24Z"
+}
+```
+
+## BuyWager
+
+This requests depends on previous cmd in placing wager
+
+#### Valid request
+```
+curl -i --location --request POST 'http://localhost:8080/buy/1' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "buying_price": 30.0
+}'
+```
+
+Response
+
+```
+{
+   "id":1,
+   "wager_id":1,
+   "buying_price":30,
+   "bought_at":"2022-07-15T00:15:29Z"
+}
+```
+
+#### Invalid requests
+
+```
+curl -i --location --request POST 'http://localhost:8080/buy/1' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "buying_price": 80.0
+}'
+```
+
+```
+curl -i --location --request POST 'http://localhost:8080/buy/1' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "buying_price": -1.0
+}'
+```
+Response
+
+```
+{"error":"INVALID BUYING PRICE"}
+```
+
+
+### WagerList
+
+
+Create some wagers first then make this cmd
+
+The items are order by placed_at desc by default
+
+```
+curl -i --location --request GET 'http://localhost:8080/wagers?page=1&limit=3'
+```
+
+Response
+
+```
+[
+   {
+      "id":3,
+      "total_wager_value":50,
+      "odds":7,
+      "selling_percentage":20,
+      "selling_price":70,
+      "current_selling_price":70,
+      "percentage_sold":null,
+      "amount_sold":null,
+      "placed_at":"2022-07-15T00:28:34Z"
+   },
+   {
+      "id":2,
+      "total_wager_value":50,
+      "odds":7,
+      "selling_percentage":20,
+      "selling_price":70,
+      "current_selling_price":70,
+      "percentage_sold":null,
+      "amount_sold":null,
+      "placed_at":"2022-07-15T00:13:49Z"
+   },
+   {
+      "id":1,
+      "total_wager_value":50,
+      "odds":7,
+      "selling_percentage":20,
+      "selling_price":70,
+      "current_selling_price":40,
+      "percentage_sold":43,
+      "amount_sold":30,
+      "placed_at":"2022-07-15T00:10:24Z"
+   }
+]
+```
+
+Page 2 limit 2
+
+```
+curl -i --location --request GET 'http://localhost:8080/wagers?page=2&limit=2'
+```
+
+Response
+
+```
+[
+   {
+      "id":1,
+      "total_wager_value":50,
+      "odds":7,
+      "selling_percentage":20,
+      "selling_price":70,
+      "current_selling_price":40,
+      "percentage_sold":43,
+      "amount_sold":30,
+      "placed_at":"2022-07-15T00:10:24Z"
+   }
+]
+```
+
+
 
 ## TODO
 

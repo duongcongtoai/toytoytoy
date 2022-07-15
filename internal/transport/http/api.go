@@ -62,7 +62,11 @@ func (h *HttpAPI) ListWagers(ctx echo.Context) error {
 	if err != nil {
 		return err
 	}
-	wagers, err := h.wagerSvc.GetWagers(ctx.Request().Context(), int32(intlimit), int32(intpage))
+	if intpage < 1 || intlimit < 1 {
+		return ctx.JSON(http.StatusBadRequest, "invalid page")
+	}
+	offset := (intpage - 1) * intlimit
+	wagers, err := h.wagerSvc.GetWagers(ctx.Request().Context(), int32(intlimit), int32(offset))
 	if err != nil {
 		return err
 	}
@@ -116,29 +120,9 @@ func ModelToWagerItem(item togo.Wager) (WagerItem, error) {
 func ModelToWagerItems(wagers []togo.Wager) ([]WagerItem, error) {
 	ret := make([]WagerItem, 0, len(wagers))
 	for _, item := range wagers {
-		fcursellingPrice, err := strconv.ParseFloat(item.CurrentSellingPrice, 64)
+		dto, err := ModelToWagerItem(item)
 		if err != nil {
 			return nil, err
-		}
-		dto := WagerItem{
-			ID:                  int64(item.ID),
-			TotalWagerValue:     int(item.TotalWagerValue),
-			Odds:                int(item.Odds),
-			SellingPercentage:   int(item.SellingPercentage),
-			CurrentSellingPrice: fcursellingPrice,
-			PlacedAt:            item.PlacedAt.Format(time.RFC3339),
-		}
-
-		if item.PercentageSold.Valid {
-			intPercentageSold := int(item.PercentageSold.Int32)
-			dto.PercentageSold = &intPercentageSold
-		}
-		if item.AmountSold.Valid {
-			famountSold, err := strconv.ParseFloat(item.AmountSold.String, 64)
-			if err != nil {
-				return nil, err
-			}
-			dto.AmountSold = &famountSold
 		}
 		ret = append(ret, dto)
 	}
